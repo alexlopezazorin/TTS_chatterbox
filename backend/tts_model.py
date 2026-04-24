@@ -5,6 +5,13 @@ import torch
 import torchaudio as ta
 from pathlib import Path
 
+# PyTorch 2.5+ defaults weights_only=True which blocks chatterbox's LlamaModel checkpoint
+_orig_torch_load = torch.load
+def _patched_torch_load(*args, **kwargs):
+    kwargs.setdefault("weights_only", False)
+    return _orig_torch_load(*args, **kwargs)
+torch.load = _patched_torch_load
+
 VOICE_DIR = Path(__file__).parent / "voices"
 DEFAULT_VOICE_AUDIO = VOICE_DIR / "default.wav"
 DEFAULT_VOICE_TEXT = VOICE_DIR / "default.txt"
