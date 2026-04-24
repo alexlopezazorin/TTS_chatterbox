@@ -9,23 +9,69 @@ export default function Home() {
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const activeGenRef = useRef(0);
 
-  async function handleSpeak() {
-    if (!text.trim() || status === "loading") return;
-
-    // Stop any audio already playing
+  function cleanup() {
+    activeGenRef.current++;
     if (audioRef.current) {
       audioRef.current.pause();
       URL.revokeObjectURL(audioRef.current.src);
       audioRef.current = null;
     }
+  }
 
+  function playAudio(b64: string, genId: number) {
+    if (activeGenRef.current !== genId) return;
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: "audio/wav" });
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audioRef.current = audio;
+    audio.onended = () => {
+      setStatus("idle");
+      URL.revokeObjectURL(url);
+      audioRef.current = null;
+    };
+    audio.onerror = () => setStatus("error");
+    setStatus("playing");
+    audio.play();
+  }
+
+  async function pollUntilDone(jobId: string, genId: number) {
+    while (true) {
+      if (activeGenRef.current !== genId) return;
+
+      await new Promise((r) => setTimeout(r, 2000));
+
+      if (activeGenRef.current !== genId) return;
+
+      const res = await fetch(`/api/speak/${jobId}`);
+      const data = await res.json();
+
+      if (activeGenRef.current !== genId) return;
+
+      if (data.status === "completed") {
+        playAudio(data.audio, genId);
+        return;
+      }
+      if (data.status === "failed") {
+        setStatus("error");
+        setErrorMsg(data.error ?? "Synthesis failed.");
+        return;
+      }
+    }
+  }
+
+  async function handleSpeak() {
+    if (!text.trim() || status === "loading") return;
+
+    cleanup();
+    const genId = activeGenRef.current;
     setStatus("loading");
     setErrorMsg("");
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-      const res = await fetch(`${apiUrl}/speak`, {
+      const res = await fetch("/api/speak", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
@@ -33,43 +79,30 @@ export default function Home() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail ?? `HTTP ${res.status}`);
+        throw new Error(data.error ?? `HTTP ${res.status}`);
       }
 
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
+      const data = await res.json();
 
-      audio.onended = () => {
-        setStatus("idle");
-        URL.revokeObjectURL(url);
-        audioRef.current = null;
-      };
-      audio.onerror = () => {
-        setStatus("error");
-        setErrorMsg("Failed to play audio.");
-      };
-
-      setStatus("playing");
-      audio.play();
+      // Local dev: audio returned immediately
+      if (data.audio) {
+        playAudio(data.audio, genId);
+      } else {
+        // Production: poll RunPod for result
+        pollUntilDone(data.jobId, genId);
+      }
     } catch (err) {
-      setStatus("error");
-      setErrorMsg(err instanceof Error ? err.message : "Unknown error");
+      if (activeGenRef.current === genId) {
+        setStatus("error");
+        setErrorMsg(err instanceof Error ? err.message : "Unknown error");
+      }
     }
   }
 
   function handleStop() {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      URL.revokeObjectURL(audioRef.current.src);
-      audioRef.current = null;
-    }
+    cleanup();
     setStatus("idle");
   }
-
-  const buttonLabel =
-    status === "loading" ? "Generating…" : status === "playing" ? "Stop" : "Speak";
 
   return (
     <main className="min-h-screen bg-gray-950 flex items-center justify-center p-6">
@@ -89,9 +122,12 @@ export default function Home() {
           disabled={status === "loading" || (status === "idle" && !text.trim())}
           className="self-end px-6 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium transition-colors"
         >
-          {buttonLabel}
+          {status === "loading" ? "Generating…" : status === "playing" ? "Stop" : "Speak"}
         </button>
 
+        {status === "loading" && (
+          <p className="text-indigo-400 text-sm">Generating audio…</p>
+        )}
         {status === "playing" && (
           <p className="text-indigo-400 text-sm">Playing…</p>
         )}
