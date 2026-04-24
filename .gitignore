@@ -1,0 +1,16 @@
+# Backend
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/.env*
+
+# Frontend (delegado al .gitignore de frontend, pero por si acaso)
+frontend/node_modules/
+frontend/.next/
+frontend/.vercel
+frontend/.env*
+
+# OS
+.DS_Store
+Thumbs.db

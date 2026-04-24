@@ -1,0 +1,5 @@
+# PyTorch is installed separately in the Dockerfile (needs --index-url for CUDA wheels)
+chatterbox-tts
+fastapi[standard]
+resemble-perth
+psutil
