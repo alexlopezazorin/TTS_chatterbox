@@ -12,4 +12,6 @@ COPY . .
 
 EXPOSE 8000
 
+ENV SERVERLESS=1
+
 CMD ["python", "handler.py"]

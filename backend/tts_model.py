@@ -45,7 +45,7 @@ def load_model():
         used = (torch.cuda.mem_get_info(0)[1] - torch.cuda.mem_get_info(0)[0]) / 1024**3
         print(f"[TTS] Model loaded | VRAM used: {used:.1f} GB")
 
-    if torch.cuda.is_available() and sys.platform == "linux":
+    if torch.cuda.is_available() and sys.platform == "linux" and not os.environ.get("SERVERLESS"):
         print("[TTS] Compiling model with torch.compile (Triton)...")
         _model.generate = torch.compile(_model.generate, mode="reduce-overhead", dynamic=True)
 
