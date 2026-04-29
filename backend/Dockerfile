@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y libsndfile1 libgomp1 && rm -rf /var/lib
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir --force-reinstall "torchvision==0.20.1" --index-url https://download.pytorch.org/whl/cu124
+    pip install --no-cache-dir --force-reinstall "torchvision==0.20.1" "torchaudio==2.5.1" --index-url https://download.pytorch.org/whl/cu124
 
 COPY . .
 
