@@ -16,7 +16,11 @@
       "Bash(git push *)",
       "Bash(docker --version)",
       "Bash(wsl docker *)",
-      "PowerShell(New-Item *)"
+      "PowerShell(New-Item *)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.answeroverflow.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }
