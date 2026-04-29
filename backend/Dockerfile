@@ -1,22 +1,18 @@
-FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel
 
-ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
-    python3.11 python3-pip \
-    libsndfile1 libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y libsndfile1 libgomp1 && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir --force-reinstall \
-    "torch==2.5.1" "torchvision==0.20.1" "torchaudio==2.5.1" \
-    --index-url https://download.pytorch.org/whl/cu124
+RUN printf "torchaudio==2.5.1\n" > /tmp/constraints.txt && \
+    pip install --no-cache-dir -c /tmp/constraints.txt -r requirements.txt && \
+    pip install --no-cache-dir --force-reinstall "torchvision==0.20.1" --index-url https://download.pytorch.org/whl/cu124
 
 COPY . .
 
 EXPOSE 8000
 ENV SERVERLESS=1
+ENV PYTHONUNBUFFERED=1
 
-CMD ["python3.11", "handler.py"]
+CMD ["python", "handler.py"]
