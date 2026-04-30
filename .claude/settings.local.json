@@ -20,7 +20,8 @@
       "WebSearch",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:www.answeroverflow.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:hub.docker.com)"
     ]
   }
 }
