@@ -40,6 +40,7 @@ RUN python3.10 -m pip install --no-cache-dir \
     omegaconf \
     safetensors \
     huggingface_hub \
+    pyloudnorm \
     runpod
 
 RUN python3.10 -m pip install --no-cache-dir --no-deps chatterbox-tts
