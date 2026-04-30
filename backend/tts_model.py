@@ -22,12 +22,11 @@ _model = None
 
 def _patch_perth():
     import perth
-    if perth.PerthImplicitWatermarker is None:
-        class _NoopWatermarker:
-            def apply_watermark(self, audio, **kwargs):
-                return audio
-        perth.PerthImplicitWatermarker = _NoopWatermarker
-        print("[TTS] perth native library unavailable — watermarking disabled.")
+    class _NoopWatermarker:
+        def apply_watermark(self, audio, **kwargs):
+            return audio
+    perth.PerthImplicitWatermarker = _NoopWatermarker
+    print("[TTS] perth watermarking disabled.")
 
 
 def load_model():
