@@ -57,11 +57,14 @@ def load_model():
         print("[TTS] Compiling model with torch.compile (Triton)...")
         _model.generate = torch.compile(_model.generate, mode="reduce-overhead", dynamic=True)
 
-    print("[TTS] Warming up CUDA kernels...")
-    t_warm = time.perf_counter()
-    with torch.inference_mode():
-        _model.generate("warmup.", audio_prompt_path=str(DEFAULT_VOICE_AUDIO))
-    print(f"[TTS] Warmup done in {time.perf_counter() - t_warm:.2f}s | Model ready.")
+    if not os.environ.get("SERVERLESS"):
+        print("[TTS] Warming up CUDA kernels...")
+        t_warm = time.perf_counter()
+        with torch.inference_mode():
+            _model.generate("warmup.", audio_prompt_path=str(DEFAULT_VOICE_AUDIO))
+        print(f"[TTS] Warmup done in {time.perf_counter() - t_warm:.2f}s | Model ready.")
+
+    print("[TTS] Model ready.")
     return _model
 
 
