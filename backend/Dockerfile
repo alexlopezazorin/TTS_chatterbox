@@ -24,8 +24,8 @@ RUN python3.10 -m pip install --upgrade pip setuptools wheel
 
 # Step 2: PyTorch with CUDA 12.4
 RUN python3.10 -m pip install --no-cache-dir \
-    torch==2.5.1+cu124 \
-    torchaudio==2.5.1+cu124 \
+    torch==2.6.0+cu124 \
+    torchaudio==2.6.0+cu124 \
     --index-url https://download.pytorch.org/whl/cu124
 
 # Step 3+4: Chatterbox dependencies first, then chatterbox with --no-deps
