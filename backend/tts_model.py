@@ -21,20 +21,33 @@ DEFAULT_VOICE_TEXT = VOICE_DIR / "default.txt"
 _model = None
 
 
-def _fix_mel_filter_buffers(model):
-    # ChatterboxTurboTTS is not an nn.Module, so iterate its nn.Module attributes.
-    # On some environments librosa.filters.mel returns float64, registering
-    # _mel_filters as float64. The matmul with float32 STFT magnitudes then fails.
-    fixed = 0
-    for attr in vars(model).values():
-        if isinstance(attr, torch.nn.Module):
-            for module in attr.modules():
-                buf = module._buffers.get("_mel_filters")
-                if buf is not None and buf.dtype == torch.float64:
-                    module._buffers["_mel_filters"] = buf.float()
-                    fixed += 1
-    if fixed:
-        print(f"[TTS] Cast _mel_filters to float32 in {fixed} module(s).")
+def _patch_s3tokenizer():
+    # Replace log_mel_spectrogram with a dtype-safe version.
+    # On some environments _mel_filters ends up as float64 while STFT magnitudes
+    # are float32, causing the matmul to fail. We cast inline so it's foolproof.
+    import torch.nn.functional as F
+    from chatterbox.models.s3tokenizer.s3tokenizer import S3Tokenizer, S3_HOP
+
+    def _safe_log_mel_spectrogram(self, audio, padding=0):
+        if not torch.is_tensor(audio):
+            audio = torch.from_numpy(audio)
+        audio = audio.to(self.device)
+        if padding > 0:
+            audio = F.pad(audio, (0, padding))
+        stft = torch.stft(
+            audio, self.n_fft, S3_HOP,
+            window=self.window.to(self.device),
+            return_complex=True,
+        )
+        magnitudes = stft[..., :-1].abs() ** 2
+        mel_spec = self._mel_filters.to(device=self.device, dtype=magnitudes.dtype) @ magnitudes
+        log_spec = torch.clamp(mel_spec, min=1e-10).log10()
+        log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
+        log_spec = (log_spec + 4.0) / 4.0
+        return log_spec
+
+    S3Tokenizer.log_mel_spectrogram = _safe_log_mel_spectrogram
+    print("[TTS] s3tokenizer log_mel_spectrogram patched (dtype-safe).")
 
 
 def _patch_perth():
@@ -51,6 +64,7 @@ def load_model():
     if _model is not None:
         return _model
 
+    _patch_s3tokenizer()
     _patch_perth()
     from chatterbox.tts_turbo import ChatterboxTurboTTS
 
@@ -64,7 +78,6 @@ def load_model():
 
     print(f"[TTS] Loading ChatterboxTurbo on {device}...")
     _model = ChatterboxTurboTTS.from_pretrained(device=device)
-    _fix_mel_filter_buffers(_model)
 
     if torch.cuda.is_available():
         used = (torch.cuda.mem_get_info(0)[1] - torch.cuda.mem_get_info(0)[0]) / 1024**3
