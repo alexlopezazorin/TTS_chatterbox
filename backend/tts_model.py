@@ -21,20 +21,7 @@ DEFAULT_VOICE_TEXT = VOICE_DIR / "default.txt"
 _model = None
 
 
-def _patch_perth():
-    import perth
-    class _NoopWatermarker:
-        def apply_watermark(self, audio, **kwargs):
-            return audio
-    perth.PerthImplicitWatermarker = _NoopWatermarker
-    print("[TTS] perth watermarking disabled.")
-
-
 def _patch_melspectrogram():
-    # librosa.filters.mel returns float64 on older librosa versions (<0.10).
-    # np.dot(float64_mel_basis, float32_spec) produces float64 mels, which then
-    # causes a Double/Float mismatch in voice_encoder inference (torch.cat).
-    # Force float32 output regardless of librosa version.
     import numpy as np
     import chatterbox.models.voice_encoder.voice_encoder as _ve
     _orig = _ve.melspectrogram
@@ -44,13 +31,22 @@ def _patch_melspectrogram():
     print("[TTS] melspectrogram float32 patch applied.")
 
 
+def _patch_perth():
+    import perth
+    class _NoopWatermarker:
+        def apply_watermark(self, audio, **kwargs):
+            return audio
+    perth.PerthImplicitWatermarker = _NoopWatermarker
+    print("[TTS] perth watermarking disabled.")
+
+
 def load_model():
     global _model
     if _model is not None:
         return _model
 
-    _patch_perth()
     _patch_melspectrogram()
+    _patch_perth()
     from chatterbox.tts_turbo import ChatterboxTurboTTS
 
     device = "cuda" if torch.cuda.is_available() else "cpu"

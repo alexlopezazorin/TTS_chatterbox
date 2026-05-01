@@ -1,5 +1,6 @@
 import sys
 import base64
+import traceback
 
 print(f"[STARTUP] Python {sys.version}")
 print(f"[STARTUP] Starting handler.py...")
@@ -33,6 +34,6 @@ def handler(job):
         audio_bytes = synthesize(text)
         return {"audio": base64.b64encode(audio_bytes).decode()}
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": traceback.format_exc()}
 
 runpod.serverless.start({"handler": handler})
