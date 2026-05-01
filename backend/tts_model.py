@@ -21,14 +21,17 @@ DEFAULT_VOICE_TEXT = VOICE_DIR / "default.txt"
 _model = None
 
 
-def _patch_melspectrogram():
-    import numpy as np
-    import chatterbox.models.voice_encoder.voice_encoder as _ve
-    _orig = _ve.melspectrogram
-    def _f32_melspectrogram(wav, hp, **kwargs):
-        return _orig(wav, hp, **kwargs).astype(np.float32)
-    _ve.melspectrogram = _f32_melspectrogram
-    print("[TTS] melspectrogram float32 patch applied.")
+def _patch_s3tokenizer():
+    # s3tokenizer._mel_filters is registered as float64 on some environments.
+    # The matmul with float32 STFT magnitudes then fails with "expected Double but found Float".
+    from chatterbox.models.s3tokenizer.s3tokenizer import S3Tokenizer
+    _orig = S3Tokenizer.log_mel_spectrogram
+    def _patched(self, wav):
+        if self._mel_filters.dtype != torch.float32:
+            self._mel_filters = self._mel_filters.float()
+        return _orig(self, wav)
+    S3Tokenizer.log_mel_spectrogram = _patched
+    print("[TTS] s3tokenizer _mel_filters float32 patch applied.")
 
 
 def _patch_perth():
@@ -45,7 +48,7 @@ def load_model():
     if _model is not None:
         return _model
 
-    _patch_melspectrogram()
+    _patch_s3tokenizer()
     _patch_perth()
     from chatterbox.tts_turbo import ChatterboxTurboTTS
 
