@@ -23,15 +23,15 @@ _model = None
 
 def _patch_s3tokenizer():
     # Replace log_mel_spectrogram with a dtype-safe version.
-    # On some environments _mel_filters ends up as float64 while STFT magnitudes
-    # are float32, causing the matmul to fail. We cast inline so it's foolproof.
+    # audio must be float32 before STFT — numpy arrays default to float64 which
+    # propagates through STFT → mel → encoder and hits mask_to_bias's dtype assert.
     import torch.nn.functional as F
     from chatterbox.models.s3tokenizer.s3tokenizer import S3Tokenizer, S3_HOP
 
     def _safe_log_mel_spectrogram(self, audio, padding=0):
         if not torch.is_tensor(audio):
             audio = torch.from_numpy(audio)
-        audio = audio.to(self.device)
+        audio = audio.to(device=self.device, dtype=torch.float32)
         if padding > 0:
             audio = F.pad(audio, (0, padding))
         stft = torch.stft(
@@ -40,7 +40,7 @@ def _patch_s3tokenizer():
             return_complex=True,
         )
         magnitudes = stft[..., :-1].abs() ** 2
-        mel_spec = self._mel_filters.to(device=self.device, dtype=magnitudes.dtype) @ magnitudes
+        mel_spec = self._mel_filters.to(device=self.device, dtype=torch.float32) @ magnitudes
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
         log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
@@ -48,6 +48,26 @@ def _patch_s3tokenizer():
 
     S3Tokenizer.log_mel_spectrogram = _safe_log_mel_spectrogram
     print("[TTS] s3tokenizer log_mel_spectrogram patched (dtype-safe).")
+
+
+def _patch_mask_to_bias():
+    # model_v2.py uses `from s3tokenizer.utils import mask_to_bias` (local binding),
+    # so we must patch the name in model_v2's namespace directly.
+    # The assertion fails when x.dtype is float64 (or any non-float16/32/bf16 type)
+    # coming out of the encoder Conv1d layers.
+    import s3tokenizer.model_v2 as _s3_model_v2
+
+    def _safe_mask_to_bias(mask: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
+        assert mask.dtype == torch.bool
+        if dtype not in (torch.float32, torch.bfloat16, torch.float16):
+            print(f"[s3tokenizer] mask_to_bias: unexpected dtype {dtype}, forcing float32")
+            dtype = torch.float32
+        mask = mask.to(dtype)
+        mask = (1.0 - mask) * -1.0e+10
+        return mask
+
+    _s3_model_v2.mask_to_bias = _safe_mask_to_bias
+    print("[TTS] s3tokenizer model_v2.mask_to_bias patched (dtype-safe).")
 
 
 def _patch_perth():
@@ -65,6 +85,7 @@ def load_model():
         return _model
 
     _patch_s3tokenizer()
+    _patch_mask_to_bias()
     _patch_perth()
     from chatterbox.tts_turbo import ChatterboxTurboTTS
 

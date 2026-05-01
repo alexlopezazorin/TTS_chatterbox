@@ -28,7 +28,9 @@
       "Read(//tmp/**)",
       "Bash(find . -iname \"*docker*\" -o -iname \"*dockerfile*\")",
       "WebFetch(domain:pypi.org)",
-      "Bash(wsl *)"
+      "Bash(wsl *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\alexl\\\\Desktop\\\\TTS_chatterbox\\\\backend\\\\.venv\" -Recurse -Filter \"model_v2.py\" -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -ExpandProperty FullName)"
     ]
   }
 }
