@@ -13,6 +13,14 @@ def _patched_torch_load(*args, **kwargs):
     return _orig_torch_load(*args, **kwargs)
 torch.load = _patched_torch_load
 
+# scipy.signal.lfilter (used in norm_loudness) can return float64 numpy arrays,
+# which torchaudio then loads as Double — force float32 to match model weights
+_orig_ta_load = ta.load
+def _patched_ta_load(*args, **kwargs):
+    wav, sr = _orig_ta_load(*args, **kwargs)
+    return wav.float(), sr
+ta.load = _patched_ta_load
+
 VOICE_DIR = Path(__file__).parent / "voices"
 DEFAULT_VOICE_AUDIO = VOICE_DIR / "default.wav"
 DEFAULT_VOICE_TEXT = VOICE_DIR / "default.txt"
