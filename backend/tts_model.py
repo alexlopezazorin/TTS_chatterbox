@@ -22,15 +22,17 @@ _model = None
 
 
 def _fix_mel_filter_buffers(model):
-    # On some environments librosa.filters.mel returns float64, so _mel_filters
-    # ends up registered as a float64 buffer. The matmul with float32 STFT
-    # magnitudes then fails. Fix all such buffers directly after model load.
+    # ChatterboxTurboTTS is not an nn.Module, so iterate its nn.Module attributes.
+    # On some environments librosa.filters.mel returns float64, registering
+    # _mel_filters as float64. The matmul with float32 STFT magnitudes then fails.
     fixed = 0
-    for module in model.modules():
-        buf = module._buffers.get("_mel_filters")
-        if buf is not None and buf.dtype == torch.float64:
-            module._buffers["_mel_filters"] = buf.float()
-            fixed += 1
+    for attr in vars(model).values():
+        if isinstance(attr, torch.nn.Module):
+            for module in attr.modules():
+                buf = module._buffers.get("_mel_filters")
+                if buf is not None and buf.dtype == torch.float64:
+                    module._buffers["_mel_filters"] = buf.float()
+                    fixed += 1
     if fixed:
         print(f"[TTS] Cast _mel_filters to float32 in {fixed} module(s).")
 
