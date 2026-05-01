@@ -21,17 +21,18 @@ DEFAULT_VOICE_TEXT = VOICE_DIR / "default.txt"
 _model = None
 
 
-def _patch_s3tokenizer():
-    # s3tokenizer._mel_filters is registered as float64 on some environments.
-    # The matmul with float32 STFT magnitudes then fails with "expected Double but found Float".
-    from chatterbox.models.s3tokenizer.s3tokenizer import S3Tokenizer
-    _orig = S3Tokenizer.log_mel_spectrogram
-    def _patched(self, wav):
-        if self._mel_filters.dtype != torch.float32:
-            self._mel_filters = self._mel_filters.float()
-        return _orig(self, wav)
-    S3Tokenizer.log_mel_spectrogram = _patched
-    print("[TTS] s3tokenizer _mel_filters float32 patch applied.")
+def _fix_mel_filter_buffers(model):
+    # On some environments librosa.filters.mel returns float64, so _mel_filters
+    # ends up registered as a float64 buffer. The matmul with float32 STFT
+    # magnitudes then fails. Fix all such buffers directly after model load.
+    fixed = 0
+    for module in model.modules():
+        buf = module._buffers.get("_mel_filters")
+        if buf is not None and buf.dtype == torch.float64:
+            module._buffers["_mel_filters"] = buf.float()
+            fixed += 1
+    if fixed:
+        print(f"[TTS] Cast _mel_filters to float32 in {fixed} module(s).")
 
 
 def _patch_perth():
@@ -48,7 +49,6 @@ def load_model():
     if _model is not None:
         return _model
 
-    _patch_s3tokenizer()
     _patch_perth()
     from chatterbox.tts_turbo import ChatterboxTurboTTS
 
@@ -62,6 +62,7 @@ def load_model():
 
     print(f"[TTS] Loading ChatterboxTurbo on {device}...")
     _model = ChatterboxTurboTTS.from_pretrained(device=device)
+    _fix_mel_filter_buffers(_model)
 
     if torch.cuda.is_available():
         used = (torch.cuda.mem_get_info(0)[1] - torch.cuda.mem_get_info(0)[0]) / 1024**3
