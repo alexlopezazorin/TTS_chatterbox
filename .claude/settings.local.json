@@ -27,7 +27,8 @@
       "Bash(curl *)",
       "Read(//tmp/**)",
       "Bash(find . -iname \"*docker*\" -o -iname \"*dockerfile*\")",
-      "WebFetch(domain:pypi.org)"
+      "WebFetch(domain:pypi.org)",
+      "Bash(wsl *)"
     ]
   }
 }

@@ -20,10 +20,14 @@ export async function GET(
   const data = await res.json();
 
   if (data.status === "COMPLETED") {
-    return NextResponse.json({ status: "completed", audio: data.output.audio });
+    if (data.output?.error) {
+      return NextResponse.json({ status: "failed", error: data.output.error });
+    }
+    return NextResponse.json({ status: "completed", audio: data.output?.audio });
   }
   if (data.status === "FAILED") {
-    return NextResponse.json({ status: "failed", error: data.output?.error ?? "Unknown error" });
+    const errorMsg = data.error ?? data.output?.error ?? JSON.stringify(data.output) ?? "Unknown error";
+    return NextResponse.json({ status: "failed", error: errorMsg });
   }
   return NextResponse.json({ status: "pending" });
 }
