@@ -36,7 +36,7 @@ RUN python3.10 -m pip install --no-cache-dir \
     resemble-perth==1.0.1 \
     s3tokenizer==0.3.0 \
     onnx==1.16.0 \
-    librosa \
+    "librosa>=0.10.0" \
     omegaconf \
     safetensors \
     huggingface_hub \

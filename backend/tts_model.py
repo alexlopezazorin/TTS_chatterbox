@@ -13,13 +13,6 @@ def _patched_torch_load(*args, **kwargs):
     return _orig_torch_load(*args, **kwargs)
 torch.load = _patched_torch_load
 
-# scipy.signal.lfilter (used in norm_loudness) can return float64 numpy arrays,
-# which torchaudio then loads as Double — force float32 to match model weights
-_orig_ta_load = ta.load
-def _patched_ta_load(*args, **kwargs):
-    wav, sr = _orig_ta_load(*args, **kwargs)
-    return wav.float(), sr
-ta.load = _patched_ta_load
 
 VOICE_DIR = Path(__file__).parent / "voices"
 DEFAULT_VOICE_AUDIO = VOICE_DIR / "default.wav"
@@ -37,12 +30,27 @@ def _patch_perth():
     print("[TTS] perth watermarking disabled.")
 
 
+def _patch_melspectrogram():
+    # librosa.filters.mel returns float64 on older librosa versions (<0.10).
+    # np.dot(float64_mel_basis, float32_spec) produces float64 mels, which then
+    # causes a Double/Float mismatch in voice_encoder inference (torch.cat).
+    # Force float32 output regardless of librosa version.
+    import numpy as np
+    import chatterbox.models.voice_encoder.voice_encoder as _ve
+    _orig = _ve.melspectrogram
+    def _f32_melspectrogram(wav, hp, **kwargs):
+        return _orig(wav, hp, **kwargs).astype(np.float32)
+    _ve.melspectrogram = _f32_melspectrogram
+    print("[TTS] melspectrogram float32 patch applied.")
+
+
 def load_model():
     global _model
     if _model is not None:
         return _model
 
     _patch_perth()
+    _patch_melspectrogram()
     from chatterbox.tts_turbo import ChatterboxTurboTTS
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
