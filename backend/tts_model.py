@@ -1,5 +1,6 @@
 import io
 import os
+import re
 import sys
 import time
 import torch
@@ -120,19 +121,35 @@ def load_model():
         used = (torch.cuda.mem_get_info(0)[1] - torch.cuda.mem_get_info(0)[0]) / 1024**3
         print(f"[TTS] Model loaded | VRAM used: {used:.1f} GB")
 
-    if torch.cuda.is_available() and sys.platform == "linux" and not os.environ.get("SERVERLESS"):
+    if torch.cuda.is_available() and sys.platform == "linux":
         print("[TTS] Compiling model with torch.compile (Triton)...")
         _model.generate = torch.compile(_model.generate, mode="reduce-overhead", dynamic=True)
 
-    if not os.environ.get("SERVERLESS"):
-        print("[TTS] Warming up CUDA kernels...")
-        t_warm = time.perf_counter()
-        with torch.inference_mode():
-            _model.generate("warmup.", audio_prompt_path=str(DEFAULT_VOICE_AUDIO))
-        print(f"[TTS] Warmup done in {time.perf_counter() - t_warm:.2f}s | Model ready.")
+    print("[TTS] Warming up CUDA kernels...")
+    t_warm = time.perf_counter()
+    with torch.inference_mode():
+        _model.generate("warmup.", audio_prompt_path=str(DEFAULT_VOICE_AUDIO))
+    print(f"[TTS] Warmup done in {time.perf_counter() - t_warm:.2f}s | Model ready.")
 
     print("[TTS] Model ready.")
     return _model
+
+
+def split_sentences(text: str) -> list[str]:
+    parts = re.split(r'(?<=[.!?])\s+', text.strip())
+    result: list[str] = []
+    pending = ""
+    for p in parts:
+        p = p.strip()
+        if not p:
+            continue
+        pending = (pending + " " + p).strip() if pending else p
+        if len(pending) >= 20:
+            result.append(pending)
+            pending = ""
+    if pending:
+        result.append(pending)
+    return result or [text.strip()]
 
 
 def synthesize(text: str) -> bytes:

@@ -8,57 +8,48 @@ export default function Home() {
   const [text, setText] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   const activeGenRef = useRef(0);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const nextStartTimeRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+  const playingRef = useRef(false);
 
   function cleanup() {
     activeGenRef.current++;
-    if (audioRef.current) {
-      audioRef.current.pause();
-      URL.revokeObjectURL(audioRef.current.src);
-      audioRef.current = null;
-    }
+    abortRef.current?.abort();
+    abortRef.current = null;
+    audioCtxRef.current?.close();
+    audioCtxRef.current = null;
+    nextStartTimeRef.current = 0;
+    playingRef.current = false;
   }
 
-  function playAudio(b64: string, genId: number) {
+  async function scheduleChunk(base64: string, genId: number) {
     if (activeGenRef.current !== genId) return;
-    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-    const blob = new Blob([bytes], { type: "audio/wav" });
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    audioRef.current = audio;
-    audio.onended = () => {
-      setStatus("idle");
-      URL.revokeObjectURL(url);
-      audioRef.current = null;
-    };
-    audio.onerror = () => setStatus("error");
-    setStatus("playing");
-    audio.play();
-  }
 
-  async function pollUntilDone(jobId: string, genId: number) {
-    while (true) {
-      if (activeGenRef.current !== genId) return;
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new AudioContext();
+      nextStartTimeRef.current = 0;
+    }
+    const ctx = audioCtxRef.current;
 
-      await new Promise((r) => setTimeout(r, 2000));
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const audioBuffer = await ctx.decodeAudioData(bytes.buffer.slice(0));
 
-      if (activeGenRef.current !== genId) return;
+    if (activeGenRef.current !== genId) return;
 
-      const res = await fetch(`/api/speak/${jobId}`);
-      const data = await res.json();
+    const source = ctx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(ctx.destination);
 
-      if (activeGenRef.current !== genId) return;
+    const startAt = Math.max(ctx.currentTime, nextStartTimeRef.current);
+    source.start(startAt);
+    nextStartTimeRef.current = startAt + audioBuffer.duration;
 
-      if (data.status === "completed") {
-        playAudio(data.audio, genId);
-        return;
-      }
-      if (data.status === "failed") {
-        setStatus("error");
-        setErrorMsg(data.error ?? "Synthesis failed.");
-        return;
-      }
+    if (!playingRef.current) {
+      playingRef.current = true;
+      setStatus("playing");
     }
   }
 
@@ -70,29 +61,60 @@ export default function Home() {
     setStatus("loading");
     setErrorMsg("");
 
+    const abort = new AbortController();
+    abortRef.current = abort;
+
     try {
       const res = await fetch("/api/speak", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
+        signal: abort.signal,
       });
 
-      if (!res.ok) {
+      if (!res.ok || !res.body) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error ?? `HTTP ${res.status}`);
       }
 
-      const data = await res.json();
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
 
-      // Local dev: audio returned immediately
-      if (data.audio) {
-        playAudio(data.audio, genId);
-      } else {
-        // Production: poll RunPod for result
-        pollUntilDone(data.jobId, genId);
+      while (true) {
+        if (activeGenRef.current !== genId) return;
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() ?? "";
+
+        for (const part of parts) {
+          if (!part.startsWith("data: ")) continue;
+          const data = JSON.parse(part.slice(6));
+          if (data.error) {
+            setStatus("error");
+            setErrorMsg(data.error);
+            return;
+          }
+          if (data.done) break;
+          if (data.audio) await scheduleChunk(data.audio, genId);
+        }
+      }
+
+      // Reset to idle once the last scheduled chunk finishes playing
+      if (activeGenRef.current === genId && audioCtxRef.current) {
+        const ctx = audioCtxRef.current;
+        const remaining = (nextStartTimeRef.current - ctx.currentTime) * 1000;
+        setTimeout(() => {
+          if (activeGenRef.current === genId) setStatus("idle");
+        }, Math.max(0, remaining) + 200);
+      } else if (activeGenRef.current === genId) {
+        setStatus("idle");
       }
     } catch (err) {
-      if (activeGenRef.current === genId) {
+      if (activeGenRef.current === genId && !abort.signal.aborted) {
         setStatus("error");
         setErrorMsg(err instanceof Error ? err.message : "Unknown error");
       }

@@ -31,7 +31,9 @@
       "Bash(wsl *)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\alexl\\\\Desktop\\\\TTS_chatterbox\\\\backend\\\\.venv\" -Recurse -Filter \"model_v2.py\" -ErrorAction SilentlyContinue)",
       "Bash(Select-Object -ExpandProperty FullName)",
-      "WebFetch(domain:medium.com)"
+      "WebFetch(domain:medium.com)",
+      "Bash(Get-ChildItem -Force)",
+      "Bash(Select-Object Name, FullName)"
     ]
   }
 }
