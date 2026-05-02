@@ -43,6 +43,8 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: ghcr.io/alexlopezazorin/chatterbox-tts:v1
+          tags: |
+            ghcr.io/alexlopezazorin/chatterbox-tts:latest
+            ghcr.io/alexlopezazorin/chatterbox-tts:v2
           cache-from: type=gha
           cache-to: type=gha,mode=max
