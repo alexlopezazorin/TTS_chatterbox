@@ -45,6 +45,6 @@ jobs:
           push: true
           tags: |
             ghcr.io/alexlopezazorin/chatterbox-tts:latest
-            ghcr.io/alexlopezazorin/chatterbox-tts:v3
+            ghcr.io/alexlopezazorin/chatterbox-tts:v4
           cache-from: type=gha
           cache-to: type=gha,mode=max
