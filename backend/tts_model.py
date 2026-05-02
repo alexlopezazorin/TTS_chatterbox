@@ -70,6 +70,22 @@ def _patch_mask_to_bias():
     print("[TTS] s3tokenizer model_v2.mask_to_bias patched (dtype-safe).")
 
 
+def _patch_voice_encoder():
+    # embeds_from_mels calls self.inference(mels.to(self.device), ...) without
+    # casting to float32. The LSTM inside forward() rejects float64 with a ValueError.
+    from chatterbox.models.voice_encoder.voice_encoder import VoiceEncoder
+
+    _orig = VoiceEncoder.embeds_from_mels
+
+    def _safe_embeds_from_mels(self, mels, mel_lens=None, **kwargs):
+        if isinstance(mels, torch.Tensor):
+            mels = mels.to(torch.float32)
+        return _orig(self, mels, mel_lens, **kwargs)
+
+    VoiceEncoder.embeds_from_mels = _safe_embeds_from_mels
+    print("[TTS] VoiceEncoder.embeds_from_mels patched (float32).")
+
+
 def _patch_perth():
     import perth
     class _NoopWatermarker:
@@ -86,6 +102,7 @@ def load_model():
 
     _patch_s3tokenizer()
     _patch_mask_to_bias()
+    _patch_voice_encoder()
     _patch_perth()
     from chatterbox.tts_turbo import ChatterboxTurboTTS
 
