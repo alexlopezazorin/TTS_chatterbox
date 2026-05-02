@@ -1,34 +1,48 @@
 #!/usr/bin/env bash
-# WSL2 fallback — run inside Ubuntu if Windows native setup fails
 set -e
 
 echo "=== TTS Chatterbox Turbo - WSL2 setup ==="
 
-# Install conda if needed
-if ! command -v conda &>/dev/null; then
+# Install Miniconda if not present
+if ! command -v conda &>/dev/null && [ ! -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
     echo "Installing Miniconda..."
     wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh
     bash /tmp/miniconda.sh -b -p "$HOME/miniconda3"
-    eval "$("$HOME/miniconda3/bin/conda" shell.bash hook)"
 fi
 
-conda create -n chatterbox-tts python=3.12 -y
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+
+if conda env list | grep -q "^chatterbox-tts"; then
+    echo "Env 'chatterbox-tts' already exists, updating..."
+else
+    conda create -n chatterbox-tts python=3.10 -y
+fi
+
 conda activate chatterbox-tts
 
-echo "[1/3] Installing PyTorch with CUDA 12.4..."
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+echo "[1/4] Installing PyTorch with CUDA 12.4..."
+pip install torch==2.6.0+cu124 torchaudio==2.6.0+cu124 \
+    --index-url https://download.pytorch.org/whl/cu124
 
-echo "[2/3] Installing chatterbox-tts + flash-attn (Linux supports it)..."
-pip install -U chatterbox-tts
-pip install flash-attn --no-build-isolation
+echo "[2/4] Installing chatterbox-tts dependencies..."
+pip install \
+    conformer diffusers "transformers<4.47.0" \
+    s3tokenizer safetensors huggingface_hub \
+    pyloudnorm resemble-perth \
+    librosa omegaconf \
+    psutil runpod soundfile
 
-echo "[3/3] Installing FastAPI..."
-pip install "fastapi[standard]" soundfile
+echo "[3/4] Installing chatterbox-tts (no-deps to avoid version conflicts)..."
+pip install chatterbox-tts --no-deps
+
+echo "[4/4] Installing FastAPI..."
+pip install "fastapi[standard]"
 
 echo ""
 echo "=== WSL2 setup complete ==="
-echo "Activate with:  conda activate chatterbox-tts"
-echo "Run with:       uvicorn main:app --reload --host 0.0.0.0 --port 8000"
 echo ""
-echo "NOTE: in tts_model.py add  attn_implementation='flash_attention_2'  to from_pretrained()"
-echo "      for better performance under WSL2."
+echo "To start the backend:"
+echo "  source ~/miniconda3/etc/profile.d/conda.sh"
+echo "  conda activate chatterbox-tts"
+echo "  cd /mnt/c/Users/alexl/Desktop/TTS_chatterbox/backend"
+echo "  uvicorn main:app --host 0.0.0.0 --port 8000"
