@@ -71,19 +71,18 @@ def _patch_mask_to_bias():
 
 
 def _patch_voice_encoder():
-    # embeds_from_mels calls self.inference(mels.to(self.device), ...) without
-    # casting to float32. The LSTM inside forward() rejects float64 with a ValueError.
+    # embeds_from_mels internally calls pack() on numpy arrays which produces float64
+    # tensors, losing any dtype cast applied before. Patching forward() is the right
+    # place — it's called per-batch immediately before the LSTM which requires float32.
     from chatterbox.models.voice_encoder.voice_encoder import VoiceEncoder
 
-    _orig = VoiceEncoder.embeds_from_mels
+    _orig_forward = VoiceEncoder.forward
 
-    def _safe_embeds_from_mels(self, mels, mel_lens=None, **kwargs):
-        if isinstance(mels, torch.Tensor):
-            mels = mels.to(torch.float32)
-        return _orig(self, mels, mel_lens, **kwargs)
+    def _safe_forward(self, mels):
+        return _orig_forward(self, mels.to(torch.float32))
 
-    VoiceEncoder.embeds_from_mels = _safe_embeds_from_mels
-    print("[TTS] VoiceEncoder.embeds_from_mels patched (float32).")
+    VoiceEncoder.forward = _safe_forward
+    print("[TTS] VoiceEncoder.forward patched (float32).")
 
 
 def _patch_perth():
